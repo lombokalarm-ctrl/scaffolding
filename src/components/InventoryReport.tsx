@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { InventoryStock, UserProfile } from '../types';
 import { 
   Package, 
@@ -20,7 +20,13 @@ import {
   X,
   PackagePlus,
   Coins,
-  Trash2
+  Trash2,
+  TrendingUp,
+  BarChart3,
+  Calendar,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Activity
 } from 'lucide-react';
 
 interface InventoryReportProps {
@@ -45,6 +51,109 @@ export default function InventoryReport({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<'all' | 'warning' | 'available'>('all');
   const [restockAmount, setRestockAmount] = useState<number>(50);
+
+  // 30-Day Trend Data State & Memoized Generators
+  const [chartSelectedId, setChartSelectedId] = useState<string>('all');
+  const [hoveredDayIndex, setHoveredDayIndex] = useState<number>(29);
+  const [chartViewMode, setChartViewMode] = useState<'utilization' | 'inout'>('utilization');
+
+  const trendData = useMemo(() => {
+    const selectedItem = chartSelectedId === 'all' 
+      ? undefined 
+      : inventory.find(item => item.itemId === chartSelectedId);
+
+    const currentRented = selectedItem ? selectedItem.rented : inventory.reduce((s, i) => s + i.rented, 0);
+    const currentAvailable = selectedItem ? selectedItem.available : inventory.reduce((s, i) => s + i.available, 0);
+    const currentMaintenance = selectedItem ? selectedItem.maintenance : inventory.reduce((s, i) => s + i.maintenance, 0);
+    const total = currentRented + currentAvailable + currentMaintenance;
+
+    const data: Array<{
+      dayName: string;
+      dayNum: number;
+      rented: number;
+      available: number;
+      maintenance: number;
+      total: number;
+      utilization: number;
+      inflow: number;
+      outflow: number;
+    }> = [];
+
+    // Base date May 6th, 2026 to June 4th, 2026 (30 days total)
+    const baseDate = new Date(2026, 4, 6); // 6th May 2026
+
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(baseDate.getTime());
+      d.setDate(baseDate.getDate() + i);
+      const dayStr = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+
+      if (i === 29) {
+        data.push({
+          dayName: dayStr,
+          dayNum: i + 1,
+          rented: currentRented,
+          available: currentAvailable,
+          maintenance: currentMaintenance,
+          total,
+          utilization: total > 0 ? Math.round((currentRented / total) * 100) : 0,
+          inflow: Math.round(total * 0.03) || 5,
+          outflow: Math.round(total * 0.04) || 6
+        });
+      } else {
+        const ratio = i / 29;
+        // Deterministic wave seed using character code of chartSelectedId
+        const seedVal = chartSelectedId === 'all' 
+          ? 42 
+          : chartSelectedId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        
+        const wave = Math.sin(ratio * Math.PI * 2.8 + seedVal * 0.5) * 0.12;
+        const waveCos = Math.cos(ratio * Math.PI * 1.5 + seedVal * 0.8) * 0.07;
+
+        let finalRented = Math.round(currentRented * (0.8 + wave + waveCos));
+        let finalMaint = Math.round(currentMaintenance * (0.95 + waveCos * 0.4));
+        
+        // Ensure within bounds
+        finalRented = Math.max(0, Math.min(total, finalRented));
+        finalMaint = Math.max(0, Math.min(total - finalRented, finalMaint));
+        const finalAvailable = Math.max(0, total - finalRented - finalMaint);
+        const computedTotal = finalRented + finalAvailable + finalMaint;
+
+        const randIn = Math.abs(Math.sin((i + 5) * 45.67 + seedVal * 1.2));
+        const randOut = Math.abs(Math.cos((i + 7) * 76.54 + seedVal * 1.5));
+        
+        const inflow = Math.round((computedTotal * 0.04) * randIn) + 2;
+        const outflow = Math.round((computedTotal * 0.05) * randOut) + 2;
+
+        data.push({
+          dayName: dayStr,
+          dayNum: i + 1,
+          rented: finalRented,
+          available: finalAvailable,
+          maintenance: finalMaint,
+          total: computedTotal,
+          utilization: computedTotal > 0 ? Math.round((finalRented / computedTotal) * 100) : 0,
+          inflow,
+          outflow
+        });
+      }
+    }
+    return data;
+  }, [chartSelectedId, inventory]);
+
+  const activeDayData = trendData[hoveredDayIndex] || trendData[29];
+
+  const avgUtilization = useMemo(() => {
+    const sum = trendData.reduce((acc, curr) => acc + curr.utilization, 0);
+    return Math.round(sum / trendData.length);
+  }, [trendData]);
+
+  const peakRented = useMemo(() => {
+    return Math.max(...trendData.map(d => d.rented));
+  }, [trendData]);
+
+  const totalPutaran = useMemo(() => {
+    return trendData.reduce((acc, curr) => acc + curr.inflow + curr.outflow, 0);
+  }, [trendData]);
 
   // Editing state
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -218,6 +327,506 @@ export default function InventoryReport({
             <Wrench className="w-6 h-6" />
           </div>
         </div>
+      </div>
+
+      {/* Laporan Ringkasan Bulanan (30 Hari Terakhir) with Chart */}
+      <div className="bg-slate-800 border border-slate-700/50 rounded-2xl p-6 shadow-xl space-y-6" id="monthly-summary-section">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700/50 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="p-1 px-1.5 rounded bg-amber-500 text-slate-950 font-black text-[10px] uppercase font-mono">ANALYTICS</span>
+              <h2 className="text-lg font-display font-bold text-white flex items-center gap-1.5">
+                <BarChart3 className="w-5 h-5 text-amber-500" />
+                Laporan Ringkasan Bulanan <span className="text-slate-400 text-sm font-medium font-sans">(Simulasi 30 Hari Terakhir)</span>
+              </h2>
+            </div>
+            <p className="text-xs text-slate-400">
+              Analisis historis tingkat utilitas sewa di proyek konstruksi, ketersediaan gudang logistik, serta denyut grafik pasokan keluar masuk barang harian.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Component selector */}
+            <div className="relative">
+              <select
+                value={chartSelectedId}
+                onChange={(e) => {
+                  setChartSelectedId(e.target.value);
+                  setHoveredDayIndex(29); // Reset to latest
+                }}
+                className="bg-slate-900 border border-slate-700 text-xs rounded-xl px-3.5 py-2 text-slate-300 focus:outline-none focus:border-amber-500 appearance-none pr-10 cursor-pointer font-bold"
+              >
+                <option value="all">📊 Semua Komponen (Kolektif)</option>
+                {inventory.map(item => (
+                  <option key={item.itemId} value={item.itemId}>
+                    📦 {item.itemName} ({item.itemId.toUpperCase()})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+            </div>
+
+            {/* Toggle chart views */}
+            <div className="bg-slate-900 p-1 rounded-xl border border-slate-700 flex gap-1">
+              <button
+                type="button"
+                onClick={() => setChartViewMode('utilization')}
+                className={`flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  chartViewMode === 'utilization'
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'text-slate-450 text-slate-450 text-slate-400 hover:text-white'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                Tren Utilitas
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartViewMode('inout')}
+                className={`flex items-center gap-1 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  chartViewMode === 'inout'
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'text-slate-450 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                Laju Keluar-Masuk
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Analytical Scorecard */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-4 space-y-1">
+            <span className="text-[10px] text-slate-500 block uppercase tracking-wider font-bold">Rata-rata Utilitas</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-display font-extrabold text-white">{avgUtilization}%</span>
+              <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-0.5">
+                <TrendingUp className="w-3 h-3" /> Stabil
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-550 text-slate-500">Rasio sewa optimal sepanjang periode sebulan terakhir.</p>
+          </div>
+
+          <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-4 space-y-1">
+            <span className="text-[10px] text-slate-500 block uppercase tracking-wider font-bold">Puncak Tersewa (Peak)</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-display font-extrabold text-amber-500 font-mono">{peakRented}</span>
+              <span className="text-[9px] text-slate-400">Unit</span>
+            </div>
+            <p className="text-[10px] text-slate-500">Penyerapan permintaan terbesar di lapangan kontraktor.</p>
+          </div>
+
+          <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-4 space-y-1">
+            <span className="text-[10px] text-slate-500 block uppercase tracking-wider font-bold">Total Arus Putar</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-display font-extrabold text-emerald-400 font-mono">{totalPutaran}</span>
+              <span className="text-[9px] text-slate-400">Mutasi</span>
+            </div>
+            <p className="text-[10px] text-slate-500">Gabungan keluar masuk unit logistik selama 30 hari.</p>
+          </div>
+
+          <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-4 space-y-1">
+            <span className="text-[10px] text-slate-500 block uppercase tracking-wider font-bold">Indeks Kesehatan Alat</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-xl font-display font-extrabold text-purple-400">96.8%</span>
+              <span className="text-[9px] bg-purple-500/10 text-purple-400 px-1 rounded font-mono font-bold">READY</span>
+            </div>
+            <p className="text-[10px] text-slate-500">Rasio unit prima non-bengkel pemeliharaan rutin.</p>
+          </div>
+        </div>
+
+        {/* Dynamic & Interactive Chart Canvas */}
+        <div className="bg-slate-900/30 border border-slate-750 border-slate-700/40 rounded-2xl p-5 relative">
+          
+          {/* Header Info details for the chart */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-350">
+              <Calendar className="w-3.5 h-3.5 text-amber-500" />
+              <span>Simulasi Siklus: 05 Mei 2026 s/d 04 Juni 2026</span>
+            </div>
+
+            {/* Legends */}
+            <div className="flex flex-wrap gap-3 text-[10px]">
+              {chartViewMode === 'utilization' ? (
+                <>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 bg-amber-500 rounded-full"></span>
+                    <span className="text-slate-400">Disewa Proyek (Rented)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full"></span>
+                    <span className="text-slate-400">Ready Gudang (Available)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 bg-purple-400 rounded-full"></span>
+                    <span className="text-slate-400">Bengkel (Maintenance)</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2.5 h-1.5 bg-emerald-500 rounded"></span>
+                    <span className="text-slate-400">Bongkaran Masuk (Inflow)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2.5 h-1.5 bg-amber-500 rounded"></span>
+                    <span className="text-slate-400">Muatan Keluar (Outflow)</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Core SVG chart block */}
+          <div className="relative w-full overflow-x-auto select-none no-scrollbar">
+            {(() => {
+              // Mathematical converters for charting geometry
+              const width = 900;
+              const height = 200;
+              const paddingLeft = 50;
+              const paddingRight = 20;
+              const paddingTop = 15;
+              const paddingBottom = 25;
+              
+              const plotWidth = width - paddingLeft - paddingRight;
+              const plotHeight = height - paddingTop - paddingBottom;
+
+              const getX = (index: number) => paddingLeft + index * (plotWidth / 29);
+
+              if (chartViewMode === 'utilization') {
+                const maxVal = Math.max(...trendData.map(d => Math.max(d.total, d.rented, d.available, d.maintenance))) || 100;
+                const maxValWithPadding = Math.round(maxVal * 1.1) || 120;
+                const getY = (val: number) => height - paddingBottom - (val / maxValWithPadding) * plotHeight;
+
+                // Build paths
+                // Rented Area & Line
+                let rentedAreaPath = `M ${getX(0)} ${height - paddingBottom} `;
+                trendData.forEach((d, idx) => { rentedAreaPath += `L ${getX(idx)} ${getY(d.rented)} `; });
+                rentedAreaPath += `L ${getX(29)} ${height - paddingBottom} Z`;
+
+                let rentedLinePath = "";
+                trendData.forEach((d, idx) => {
+                  if (idx === 0) rentedLinePath += `M ${getX(idx)} ${getY(d.rented)}`;
+                  else rentedLinePath += ` L ${getX(idx)} ${getY(d.rented)}`;
+                });
+
+                // Available Area & Line
+                let availAreaPath = `M ${getX(0)} ${height - paddingBottom} `;
+                trendData.forEach((d, idx) => { availAreaPath += `L ${getX(idx)} ${getY(d.available)} `; });
+                availAreaPath += `L ${getX(29)} ${height - paddingBottom} Z`;
+
+                let availLinePath = "";
+                trendData.forEach((d, idx) => {
+                  if (idx === 0) availLinePath += `M ${getX(idx)} ${getY(d.available)}`;
+                  else availLinePath += ` L ${getX(idx)} ${getY(d.available)}`;
+                });
+
+                return (
+                  <svg className="w-full min-w-[840px] h-[210px]" viewBox={`0 0 ${width} ${height}`}>
+                    <defs>
+                      <linearGradient id="rentedGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.18" />
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+                      </linearGradient>
+                      <linearGradient id="availGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#34d399" stopOpacity="0.12" />
+                        <stop offset="100%" stopColor="#34d399" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Horizontal Dotted grid lines */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+                      const val = Math.round(maxValWithPadding * pct);
+                      const yPos = getY(val);
+                      return (
+                        <g key={i} className="opacity-40">
+                          <line
+                            x1={paddingLeft}
+                            y1={yPos}
+                            x2={width - paddingRight}
+                            y2={yPos}
+                            stroke="#475569"
+                            strokeWidth="1"
+                            strokeDasharray="4 4"
+                          />
+                          <text
+                            x={paddingLeft - 8}
+                            y={yPos + 3}
+                            fill="#64748b"
+                            className="text-[8px] font-mono font-bold text-right"
+                            textAnchor="end"
+                          >
+                            {val}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Available area */}
+                    <path d={availAreaPath} fill="url(#availGrad)" className="transition-all duration-300" />
+                    <path d={availLinePath} fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" className="transition-all duration-300" />
+
+                    {/* Rented area */}
+                    <path d={rentedAreaPath} fill="url(#rentedGrad)" className="transition-all duration-300" />
+                    <path d={rentedLinePath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" className="transition-all duration-300" />
+
+                    {/* Vertical guidelines on hover */}
+                    <line
+                      x1={getX(hoveredDayIndex)}
+                      y1={paddingTop}
+                      x2={getX(hoveredDayIndex)}
+                      y2={height - paddingBottom}
+                      stroke="#f59e0b"
+                      strokeWidth="1.5"
+                      strokeDasharray="3 3"
+                      className="opacity-70 transition-all duration-150"
+                    />
+
+                    {/* Date Tick labels (Every 3 days to avoid crowding) */}
+                    {trendData.map((d, idx) => {
+                      if (idx % 3 !== 0 && idx !== 29) return null;
+                      return (
+                        <text
+                          key={idx}
+                          x={getX(idx)}
+                          y={height - 6}
+                          fill="#64748b"
+                          className="text-[8px] font-mono font-black"
+                          textAnchor="middle"
+                        >
+                          {d.dayName}
+                        </text>
+                      );
+                    })}
+
+                    {/* Glowing highlight dots on active indices */}
+                    <circle
+                      cx={getX(hoveredDayIndex)}
+                      cy={getY(activeDayData.rented)}
+                      r="5.5"
+                      fill="#f59e0b"
+                      stroke="#1e293b"
+                      strokeWidth="2"
+                      className="transition-all duration-150 shadow-md"
+                    />
+                    <circle
+                      cx={getX(hoveredDayIndex)}
+                      cy={getY(activeDayData.available)}
+                      r="4.5"
+                      fill="#34d399"
+                      stroke="#1e293b"
+                      strokeWidth="2"
+                      className="transition-all duration-150"
+                    />
+
+                    {/* Invisible sensory rects to handle high accuracy touch/mouse points */}
+                    {trendData.map((d, idx) => (
+                      <rect
+                        key={idx}
+                        x={getX(idx) - (plotWidth / 58)}
+                        y={paddingTop}
+                        width={plotWidth / 29}
+                        height={plotHeight}
+                        fill="transparent"
+                        className="cursor-pointer"
+                        onMouseEnter={() => setHoveredDayIndex(idx)}
+                        onTouchStart={() => setHoveredDayIndex(idx)}
+                      />
+                    ))}
+                  </svg>
+                );
+              } else {
+                // In/Out Flow Bar charts
+                const maxInOut = Math.max(...trendData.map(d => Math.max(d.inflow, d.outflow))) || 10;
+                const maxInOutWithPadding = Math.round(maxInOut * 1.15) || 12;
+                const getYBar = (val: number) => height - paddingBottom - (val / maxInOutWithPadding) * plotHeight;
+
+                return (
+                  <svg className="w-full min-w-[840px] h-[210px]" viewBox={`0 0 ${width} ${height}`}>
+                    
+                    {/* Horizontal Dotted grid lines */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+                      const val = Math.round(maxInOutWithPadding * pct);
+                      const yPos = getYBar(val);
+                      return (
+                        <g key={i} className="opacity-40">
+                          <line
+                            x1={paddingLeft}
+                            y1={yPos}
+                            x2={width - paddingRight}
+                            y2={yPos}
+                            stroke="#475569"
+                            strokeWidth="1"
+                            strokeDasharray="4 4"
+                          />
+                          <text
+                            x={paddingLeft - 8}
+                            y={yPos + 3}
+                            fill="#64748b"
+                            className="text-[8px] font-mono font-bold text-right"
+                            textAnchor="end"
+                          >
+                            {val}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Render side-by-side columns */}
+                    {trendData.map((d, idx) => {
+                      const isHovered = idx === hoveredDayIndex;
+                      
+                      const barWidth = 4.5;
+                      const inX = getX(idx) - barWidth - 1.5;
+                      const outX = getX(idx) + 1.5;
+
+                      const inY = getYBar(d.inflow);
+                      const outY = getYBar(d.outflow);
+
+                      const inHeight = height - paddingBottom - inY;
+                      const outHeight = height - paddingBottom - outY;
+
+                      return (
+                        <g key={idx} className="transition-all duration-150">
+                          {/* Inflow bar */}
+                          <rect
+                            x={inX}
+                            y={inY}
+                            width={barWidth}
+                            height={Math.max(1, inHeight)}
+                            fill={isHovered ? '#10b981' : '#059669'}
+                            rx="1"
+                            className="transition-all duration-150"
+                          />
+                          
+                          {/* Outflow bar */}
+                          <rect
+                            x={outX}
+                            y={outY}
+                            width={barWidth}
+                            height={Math.max(1, outHeight)}
+                            fill={isHovered ? '#fbbf24' : '#d97706'}
+                            rx="1"
+                            className="transition-all duration-150"
+                          />
+
+                          {/* Highlight outline for hovered column day */}
+                          {isHovered && (
+                            <rect
+                              x={getX(idx) - barWidth - 4}
+                              y={paddingTop - 4}
+                              width={barWidth * 2 + 8}
+                              height={plotHeight + 8}
+                              fill="none"
+                              stroke="#fbbf24"
+                              strokeWidth="1.5"
+                              strokeOpacity="0.25"
+                              strokeDasharray="2 2"
+                            />
+                          )}
+                        </g>
+                      );
+                    })}
+
+                    {/* Date Tick labels (Every 3 days to avoid crowding) */}
+                    {trendData.map((d, idx) => {
+                      if (idx % 3 !== 0 && idx !== 29) return null;
+                      return (
+                        <text
+                          key={idx}
+                          x={getX(idx)}
+                          y={height - 6}
+                          fill="#64748b"
+                          className="text-[8px] font-mono font-black"
+                          textAnchor="middle"
+                        >
+                          {d.dayName}
+                        </text>
+                      );
+                    })}
+
+                    {/* Sensory zones for hover state */}
+                    {trendData.map((d, idx) => (
+                      <rect
+                        key={idx}
+                        x={getX(idx) - (plotWidth / 58)}
+                        y={paddingTop}
+                        width={plotWidth / 29}
+                        height={plotHeight}
+                        fill="transparent"
+                        className="cursor-pointer"
+                        onMouseEnter={() => setHoveredDayIndex(idx)}
+                        onTouchStart={() => setHoveredDayIndex(idx)}
+                      />
+                    ))}
+                  </svg>
+                );
+              }
+            })()}
+          </div>
+        </div>
+
+        {/* Dynamic hovered item breakdown box */}
+        <div className="bg-slate-900 border border-slate-700/50 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 font-sans">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-slate-800 rounded-lg text-amber-500 border border-slate-750 font-black text-xs font-mono shrink-0">
+              HARI ke-{activeDayData.dayNum}
+            </div>
+            <div>
+              <h5 className="text-xs font-bold text-white flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                Catatan Historis: <span className="text-amber-500">{activeDayData.dayName} 2026</span>
+                {hoveredDayIndex === 29 && (
+                  <span className="text-[8px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1.5 rounded uppercase tracking-wider font-mono ml-2 font-bold animate-pulse">
+                    LIVE HARI INI
+                  </span>
+                )}
+              </h5>
+              <p className="text-[10px] text-slate-400">
+                Aset sewa berada pada titik keseimbangan dinamis. Silakan geser diagram di atas untuk melihat tren harian.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto">
+            <div className="bg-slate-800 p-2.5 rounded-xl border border-slate-750">
+              <span className="text-[9px] text-slate-500 block font-bold uppercase tracking-wide">Tersewa Proyek</span>
+              <span className="text-xs font-mono font-extrabold text-amber-400 block mt-0.5">
+                {activeDayData.rented} <font className="text-[8px] text-slate-500 font-sans font-medium normal-case">pcs</font>
+              </span>
+            </div>
+            
+            <div className="bg-slate-800 p-2.5 rounded-xl border border-slate-750">
+              <span className="text-[9px] text-slate-500 block font-bold uppercase tracking-wide">Ready Gudang</span>
+              <span className="text-xs font-mono font-extrabold text-emerald-400 block mt-0.5">
+                {activeDayData.available} <font className="text-[8px] text-slate-500 font-sans font-medium normal-case">pcs</font>
+              </span>
+            </div>
+
+            <div className="bg-slate-850 p-2.5 rounded-xl border border-slate-750">
+              <div className="flex items-center gap-1">
+                <ArrowDownLeft className="text-emerald-400 w-3 h-3" />
+                <span className="text-[9px] text-slate-500 block font-bold uppercase tracking-wide">Bongkar Masuk</span>
+              </div>
+              <span className="text-xs font-mono font-extrabold text-emerald-450 block mt-0.5 text-emerald-500">
+                +{activeDayData.inflow} <font className="text-[8px] text-slate-500 font-sans font-medium normal-case">pcs</font>
+              </span>
+            </div>
+
+            <div className="bg-slate-850 p-2.5 rounded-xl border border-slate-750">
+              <div className="flex items-center gap-1">
+                <ArrowUpRight className="text-amber-500 w-3 h-3" />
+                <span className="text-[9px] text-slate-500 block font-bold uppercase tracking-wide">Muat Kirim</span>
+              </div>
+              <span className="text-xs font-mono font-extrabold text-amber-500 block mt-0.5">
+                -{activeDayData.outflow} <font className="text-[8px] text-slate-500 font-sans font-medium normal-case">pcs</font>
+              </span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {/* Main Stock Table and Fast-Restock Console */}
