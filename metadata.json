@@ -1,0 +1,6 @@
+{
+  "name": "Sewa Scaffolding & Tracking",
+  "description": "Sistem penyewaan scaffolding online dengan pelacakan pengiriman real-time, metode sewa harian/bulanan, manajemen jaminan, notifikasi otomatis, penagihan invoice bertahap, laporan inventaris stok, dan dukungan instalasi PWA.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

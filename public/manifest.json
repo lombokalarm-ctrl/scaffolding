@@ -1,0 +1,21 @@
+{
+  "short_name": "SewaScaffold",
+  "name": "Sewa Scaffolding & Real-time Tracking",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/isometric/192/scaffolding.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://img.icons8.com/isometric/512/scaffolding.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#e2e8f0",
+  "display": "standalone",
+  "orientation": "portrait"
+}
