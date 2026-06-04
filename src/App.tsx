@@ -21,13 +21,16 @@ import {
   UserProfile, 
   UserRole, 
   Customer, 
-  AuditLog 
+  AuditLog,
+  CompanyProfile
 } from './types';
 import Dashboard from './components/Dashboard';
 import SewaForm from './components/SewaForm';
 import InvoiceViewer from './components/InvoiceViewer';
 import InventoryReport from './components/InventoryReport';
 import CustomerManager from './components/CustomerManager';
+import CompanyProfileManager from './components/CompanyProfileManager';
+import UserManager from './components/UserManager';
 import { 
   Layers, 
   Wrench, 
@@ -44,7 +47,8 @@ import {
   HelpCircle,
   Users,
   ChevronDown,
-  Activity
+  Activity,
+  UserCheck
 } from 'lucide-react';
 
 export default function App() {
@@ -59,9 +63,62 @@ export default function App() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   // User database & audit logging states
+  const [users, setUsers] = useState<UserProfile[]>(INITIAL_USERS);
   const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_USERS[0]); // Default "Budi Santoso", warehouse_admin
   const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_LOGS);
+
+  // Corporate Profile Identity & letterhead states
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>({
+    companyName: 'PT SCAFFORENT LOGISTIK INDONESIA',
+    tagline: 'Penyedia Sewa Modular Keselamatan Scaffolding Konstruksi Profesional.',
+    address: 'DKI Jakarta & Jabodetabek, Indonesia.',
+    phone: '021-88997766',
+    email: 'info@scafforent.id',
+    website: 'www.scafforent.id',
+    bankName: 'Bank Mandiri',
+    bankAccountNo: '167-009-84321-11',
+    bankAccountHolder: 'PT SCAFFORENT LOGISTIK INDONESIA',
+    generalTerms: '1. Uang jaminan (deposit) akan dikembalikan paling lambat H+2 setelah tim verifikator gudang menyelesaikan inspeksi kelengkapan scaffolding di lokasi bongkar muat.\n2. Untuk perpanjangan sewa kontrak bulan kedua, cukup melunasi biaya sewa bulanan murni tanpa dibebankan uang jaminan lagi.',
+    logoText: 'SR'
+  });
+
+  // User management updates
+  const handleAddUser = (newUser: UserProfile) => {
+    setUsers(prev => [...prev, newUser]);
+    logAction(
+      currentUser.name,
+      currentUser.role,
+      'Tambah User Baru',
+      `Mendaftarkan pengguna baru "${newUser.name}" dengan peran "${newUser.role}".`,
+      'system'
+    );
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    const userToDelete = users.find(u => u.id === userId);
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    if (userToDelete) {
+      logAction(
+        currentUser.name,
+        currentUser.role,
+        'Hapus User',
+        `Menghapus pengguna "${userToDelete.name}" dari sistem secara permanen.`,
+        'system'
+      );
+    }
+  };
+
+  const handleUpdateCompanyProfile = (newProfile: CompanyProfile) => {
+    setCompanyProfile(newProfile);
+    logAction(
+      currentUser.name,
+      currentUser.role,
+      'Update Profil Perusahaan',
+      `Memperbarui detail identitas resmi & rekening bank di profil perusahaan.`,
+      'system'
+    );
+  };
 
   // Integrated action audit logger
   const logAction = (userName: string, userRole: UserRole, action: string, details: string, category: 'inventory' | 'sales' | 'customer' | 'system') => {
@@ -522,7 +579,9 @@ export default function App() {
                 { id: 'sewa', name: 'Mulai Sewa Online', icon: Wrench },
                 { id: 'invoice', name: 'Faktur & Kontrak', icon: Receipt },
                 { id: 'inventory', name: 'Kelola Inventaris', icon: ClipboardList },
-                { id: 'pelanggan', name: 'Database Pelanggan', icon: Users }
+                { id: 'pelanggan', name: 'Database Pelanggan', icon: Users },
+                { id: 'users', name: 'Kelola Staf', icon: UserCheck },
+                { id: 'profile', name: 'Profil Perusahaan', icon: Building }
               ].map((tab) => {
                 const IconComponent = tab.icon;
                 const active = activeTab === tab.id;
@@ -564,7 +623,7 @@ export default function App() {
                   <div className="px-3.5 py-2 border-b border-slate-700/50 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                     Simulasi Identitas Logistik
                   </div>
-                  {INITIAL_USERS.map((user) => (
+                  {users.map((user) => (
                     <button
                       key={user.id}
                       onClick={() => {
@@ -616,7 +675,9 @@ export default function App() {
               { id: 'sewa', name: 'Sewa Baru (Online)', icon: Wrench },
               { id: 'invoice', name: 'Invoices & Jaminan', icon: Receipt },
               { id: 'inventory', name: 'Kelola Inventaris Gudang', icon: ClipboardList },
-              { id: 'pelanggan', name: 'Database Pelanggan', icon: Users }
+              { id: 'pelanggan', name: 'Database Pelanggan', icon: Users },
+              { id: 'users', name: 'Kelola Anggota Staf', icon: UserCheck },
+              { id: 'profile', name: 'Profil & Kop Surat', icon: Building }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const active = activeTab === tab.id;
@@ -676,6 +737,7 @@ export default function App() {
             onTriggerExtension={handleTriggerExtension}
             onPayInvoice={handlePayInvoice}
             onTriggerRefund={handleTriggerRefund}
+            companyProfile={companyProfile}
           />
         )}
 
@@ -696,6 +758,27 @@ export default function App() {
             customers={customers}
             onAddCustomer={handleAddCustomer}
             onUpdateCustomer={handleUpdateCustomer}
+            currentUser={currentUser}
+          />
+        )}
+
+        {activeTab === 'users' && (
+          <UserManager
+            users={users}
+            currentUser={currentUser}
+            onAddUser={handleAddUser}
+            onDeleteUser={handleDeleteUser}
+            onSwitchUser={(user) => {
+              setCurrentUser(user);
+              logAction(user.name, user.role, 'Ganti Akun', `Mengganti simulasi aktor kontrol menjadi ${user.name} (${user.role}).`, 'system');
+            }}
+          />
+        )}
+
+        {activeTab === 'profile' && (
+          <CompanyProfileManager
+            profile={companyProfile}
+            onUpdateProfile={handleUpdateCompanyProfile}
             currentUser={currentUser}
           />
         )}

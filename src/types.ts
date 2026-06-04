@@ -115,3 +115,18 @@ export interface AuditLog {
   timestamp: string;
   category: 'inventory' | 'sales' | 'customer' | 'system';
 }
+
+export interface CompanyProfile {
+  companyName: string;
+  tagline: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  bankName: string;
+  bankAccountNo: string;
+  bankAccountHolder: string;
+  generalTerms: string;
+  logoText: string;
+}
+

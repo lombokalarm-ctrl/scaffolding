@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Invoice, RentalOrder } from '../types';
+import { Invoice, RentalOrder, CompanyProfile } from '../types';
 import { 
   Receipt, 
   Printer, 
@@ -16,7 +16,9 @@ import {
   Coins, 
   HelpCircle,
   TrendingUp,
-  Download
+  Download,
+  Share2,
+  MessageSquare
 } from 'lucide-react';
 
 interface InvoiceViewerProps {
@@ -25,6 +27,7 @@ interface InvoiceViewerProps {
   onTriggerExtension: (orderId: string, monthlyCost: number) => void;
   onPayInvoice: (invoiceId: string) => void;
   onTriggerRefund: (orderId: string) => void;
+  companyProfile: CompanyProfile;
 }
 
 export default function InvoiceViewer({
@@ -32,7 +35,8 @@ export default function InvoiceViewer({
   orders,
   onTriggerExtension,
   onPayInvoice,
-  onTriggerRefund
+  onTriggerRefund,
+  companyProfile
 }: InvoiceViewerProps) {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(
     invoices.length > 0 ? invoices[0].id : null
@@ -60,6 +64,50 @@ export default function InvoiceViewer({
     const details = getExtensionDetails(order);
     onTriggerExtension(order.id, details.totalExtensionCharge);
     alert(`Sukses! Invoice Bulan Kedua untuk proyek "${order.projectName}" telah diterbitkan tanpa membebankan Uang Jaminan baru.`);
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!activeInvoice) return;
+    const relatedOrder = orders.find(o => o.id === activeInvoice.orderId);
+    const rawPhone = relatedOrder ? relatedOrder.contractorPhone : '';
+    
+    // Format WhatsApp number
+    let formattedPhone = rawPhone.replace(/\D/g, '');
+    if (formattedPhone.startsWith('0')) {
+      formattedPhone = '62' + formattedPhone.slice(1);
+    }
+
+    const typeLabel = 
+      activeInvoice.type === 'initial' ? 'Sewa Awal & Uang Jaminan' :
+      activeInvoice.type === 'extension' ? 'Sewa Lanjutan Bulan Ke-2' :
+      'Refund / Pencairan Uang Jaminan';
+
+    const statusLabel = activeInvoice.isPaid ? 'LUNAS (Terbayar ✓)' : 'BELUM DIBAYAR (Unpaid 🔔)';
+
+    const message = `Halo Bpk/Ibu dari *${activeInvoice.contractorName}*,\n\n` +
+      `Berikut rincian tagihan Sewa Scaffolding Anda dari *${companyProfile.companyName.toUpperCase()}*:\n\n` +
+      `*RINCIAN DOKUMEN FAKTUR:*\n` +
+      `• No Invoice: *${activeInvoice.id}*\n` +
+      `• Referensi Order: *${activeInvoice.orderId}*\n` +
+      `• Proyek: *${activeInvoice.projectName}*\n` +
+      `• Jenis Tagihan: *${typeLabel}*\n` +
+      `• Status Pembayaran: *${statusLabel}*\n\n` +
+      `*RINCIAN BIAYA:*\n` +
+      `• Subtotal Sewa: *${formatRupiah(activeInvoice.rentCost)}*\n` +
+      `• Jaminan (Refundable): *${formatRupiah(activeInvoice.securityDeposit)}*\n` +
+      (activeInvoice.discount > 0 ? `• Diskon Paket: *-${formatRupiah(activeInvoice.discount)}*\n` : '') +
+      `• *Total Tagihan (Grand Total): ${formatRupiah(activeInvoice.totalAmount)}*\n\n` +
+      `*METODE TRANSFER BANK:*\n` +
+      `• ${companyProfile.bankName}: *${companyProfile.bankAccountNo}*\n` +
+      `• Atas Nama: *${companyProfile.bankAccountHolder}*\n` +
+      `• Catatan Transfer: *Membayar Invoice ${activeInvoice.id}*\n\n` +
+      `Mohon kirimkan screenshot bukti transfer ke WhatsApp kami jika pembayaran telah diselesaikan. Terima kasih atas kepercayaan Anda! 🙏\n\n` +
+      `_${companyProfile.tagline}_`;
+
+    const encodedText = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedText}`;
+    
+    window.open(whatsappUrl, '_blank');
   };
 
   const handlePrint = () => {
@@ -241,6 +289,13 @@ export default function InvoiceViewer({
                 )}
                 
                 <button
+                  onClick={handleShareWhatsApp}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1 cursor-pointer font-semibold"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" /> Kirim WhatsApp
+                </button>
+
+                <button
                   onClick={handlePrint}
                   className="bg-slate-800 hover:bg-slate-700 text-slate-350 hover:text-white border border-slate-700 px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1"
                 >
@@ -256,12 +311,12 @@ export default function InvoiceViewer({
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-350/20 pb-5 mb-6 text-slate-200">
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="p-1 px-1.5 rounded bg-amber-500 text-slate-950 font-extrabold text-sm font-display tracking-tight">SR</span>
-                    <span className="font-display font-bold text-lg text-white">SCAFFORENT LOGISTIK</span>
+                    <span className="p-1 px-1.5 rounded bg-amber-500 text-slate-950 font-extrabold text-sm font-display tracking-tight">{companyProfile.logoText || 'SR'}</span>
+                    <span className="font-display font-bold text-lg text-white uppercase">{companyProfile.companyName}</span>
                   </div>
                   <p className="text-[10px] text-slate-400 max-w-xs leading-normal">
-                    Penyedia Sewa Modular Keselamatan Scaffolding Konstruksi Profesional.<br />
-                    DKI Jakarta & Jabodetabek, Indonesia.
+                    {companyProfile.tagline}<br />
+                    {companyProfile.address}
                   </p>
                 </div>
 
@@ -407,17 +462,16 @@ export default function InvoiceViewer({
                 <div>
                   <h5 className="font-bold text-slate-300 mb-1.5 uppercase tracking-wide">METODE PEMBAYARAN TRANSFER BANK:</h5>
                   <p className="font-mono bg-slate-900/60 p-2.5 rounded border border-slate-800 space-y-0.5">
-                    <span className="block">Bank Mandiri: <strong>167-009-84321-11</strong></span>
-                    <span className="block">Atas Nama: <strong>PT SCAFFORENT LOGISTIK INDONESIA</strong></span>
-                    <span className="block text-slate-500">Sertakan Catatan: Invoice {activeInvoice.id}</span>
+                    <span className="block">{companyProfile.bankName}: <strong>{companyProfile.bankAccountNo}</strong></span>
+                    <span className="block">Atas Nama: <strong>{companyProfile.bankAccountHolder}</strong></span>
+                    <span className="block text-slate-500 font-bold uppercase">Sertakan Catatan: Invoice {activeInvoice.id}</span>
                   </p>
                 </div>
 
                 <div className="space-y-1">
                   <h5 className="font-bold text-slate-300 mb-1">KETENTUAN UMUM:</h5>
-                  <p>
-                    1. Uang jaminan (deposit) akan **dikembalikan paling lambat H+2** setelah tim verifikator gudang menyelesaikan inspeksi kelengkapan scaffolding di lokasi bongkar muat.<br />
-                    2. Untuk perpanjangan sewa kontrak bulan kedua, cukup melunasi biaya sewa bulanan murni tanpa dibebankan uang jaminan lagi.
+                  <p className="whitespace-pre-line leading-relaxed">
+                    {companyProfile.generalTerms}
                   </p>
                 </div>
               </div>
